@@ -1,25 +1,30 @@
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/router";
 import mongoose from "mongoose";
 import Product from "../../../models/Product";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import Error from "next/error";
 
-const Slug = ({ buyNow, addToCart, product, variants }) => {
-  const router = useRouter();
+const Slug = ({ buyNow, addToCart, product, variants, error}) => {
   const [pin, setPin] = useState();
   const [service, setService] = useState();
   const [selectedColor, setSelectedColor] = useState(null);
   const [selectedSize, setSelectedSize] = useState(null);
+  const [availableQty, setAvailableQty] = useState(0);
 
   useEffect(() => {
+    if(!error){
     // Set the first color and size as default on initial load
     const firstColor = Object.keys(variants)[0];
     if (firstColor) {
       setSelectedColor(firstColor);
       const firstSize = Object.keys(variants[firstColor])[0];
-      if (firstSize) setSelectedSize(firstSize);
+      if (firstSize) {
+        setSelectedSize(firstSize);
+        setAvailableQty(variants[firstColor][firstSize]?.availableQty || 0); // Set initial availableQty
+      }
     }
+  }
   }, [variants]);
 
   const checkServiceability = async () => {
@@ -32,24 +37,27 @@ const Slug = ({ buyNow, addToCart, product, variants }) => {
         },
         body: JSON.stringify({ pincode: pin }), // Pass the pincode to the API
       });
-  
+
       // Parse the JSON response
       const pinJson = await response.json();
-  
+
       // Check if pincode is found in the response
       if (response.ok) {
         // If serviceable, show success message
         setService(true);
-        toast.success(`Your Pincode is serviceable! ${pinJson.districtName}, ${pinJson.stateName}`, {
-          position: "top-center",
-          autoClose: 3000,
-          hideProgressBar: false,
-          closeOnClick: true,
-          pauseOnHover: true,
-          draggable: true,
-          progress: undefined,
-          theme: "light",
-        });
+        toast.success(
+          `Your Pincode is serviceable! ${pinJson.districtName}, ${pinJson.stateName}`,
+          {
+            position: "top-center",
+            autoClose: 3000,
+            hideProgressBar: false,
+            closeOnClick: true,
+            pauseOnHover: true,
+            draggable: true,
+            progress: undefined,
+            theme: "light",
+          }
+        );
       } else {
         // If not found, show error message
         setService(false);
@@ -78,7 +86,6 @@ const Slug = ({ buyNow, addToCart, product, variants }) => {
       });
     }
   };
-  
 
   const onChangePin = (e) => {
     setPin(e.target.value);
@@ -87,11 +94,13 @@ const Slug = ({ buyNow, addToCart, product, variants }) => {
   const handleColorChange = (color) => {
     setSelectedColor(color);
     const firstSize = Object.keys(variants[color])[0];
-    setSelectedSize(firstSize); // Set the first available size for the selected color
+    setSelectedSize(firstSize);
+    setAvailableQty(variants[color][firstSize]?.availableQty || 0); // Update availableQty
   };
 
   const handleSizeChange = (size) => {
     setSelectedSize(size);
+    setAvailableQty(variants[selectedColor][size]?.availableQty || 0); // Update availableQty
   };
 
   const getProductImage = () => {
@@ -102,9 +111,14 @@ const Slug = ({ buyNow, addToCart, product, variants }) => {
     return product.img;
   };
 
+  if(error == 404){
+    return <Error statusCode={404}/>
+  }
+  
+
   return (
     <>
-    <ToastContainer
+      <ToastContainer
         position="top-center"
         autoClose={3000}
         hideProgressBar={false}
@@ -131,9 +145,6 @@ const Slug = ({ buyNow, addToCart, product, variants }) => {
               <h1 className="text-gray-900 text-3xl title-font font-medium mb-1">
                 {product.title}
               </h1>
-              {/* <div className="flex mb-4">
-                <span className="text-gray-600 ml-3">4 Reviews</span>
-              </div> */}
               <p className="leading-relaxed">
                 {product.desc || "Product description goes here."}
               </p>
@@ -187,10 +198,18 @@ const Slug = ({ buyNow, addToCart, product, variants }) => {
                 </div>
               </div>
               <div className="flex">
-                <span className="title-font font-medium text-2xl text-gray-900">
-                  ₹{product.price || "0"}
-                </span>
-                <button
+                {/* Display "Out of Stock" or Price */}
+                {availableQty > 0 ? (
+                  <span className="title-font font-medium text-2xl text-gray-900">
+                    ₹{product.price || "0"}
+                  </span>
+                ) : (
+                  <span className="title-font font-medium text-2xl text-red-500">
+                    Currently Out of Stock!
+                  </span>
+                )}
+                {/* Buy Now Button */}
+                {availableQty > 0 && (<button
                   className="flex ml-8 text-white bg-pink-500 border-0 py-2 px-2 md:px-6 focus:outline-none hover:bg-pink-600 rounded"
                   onClick={() =>
                     buyNow(
@@ -202,29 +221,35 @@ const Slug = ({ buyNow, addToCart, product, variants }) => {
                       selectedColor
                     )
                   }
+                  disabled={availableQty <= 0} // Disable if out of stock
                 >
                   Buy Now
-                </button>
+                </button>)}
 
-                <button
-                  onClick={() =>
-                    addToCart(
-                      product.slug,
-                      1,
-                      product.price,
-                      product.title,
-                      selectedSize,
-                      selectedColor
-                    )
-                  }
-                  className="flex ml-4 text-white bg-pink-500 border-0 py-2 px-2 md:px-6 focus:outline-none hover:bg-pink-600 rounded"
-                >
-                  Add to Cart
-                </button>
+                {/* Add to Cart Button */}
+                {availableQty > 0 && (
+                  <button
+                    onClick={() =>
+                      addToCart(
+                        product.slug,
+                        1,
+                        product.price,
+                        product.title,
+                        selectedSize,
+                        selectedColor,
+                        getProductImage()
+                      )
+                    }
+                    className="flex ml-4 text-white bg-pink-500 border-0 py-2 px-2 md:px-6 focus:outline-none hover:bg-pink-600 rounded"
+                    disabled={availableQty <= 0} // Disable if out of stock
+                  >
+                    Add to Cart
+                  </button>
+                )}
               </div>
               <div className="pin mt-6 flex space-x-2">
                 <input
-                  onChange={onChangePin}
+                  onChange={(e) => setPin(e.target.value)}
                   className="px-2 border-2 border-gray-400 rounded-md"
                   placeholder="Enter your pincode"
                   type="number"
@@ -260,23 +285,32 @@ export async function getServerSideProps(context) {
   }
 
   let product = await Product.findOne({ slug: context.query.slug });
-  console.log(product);
+  
+  if (product == null) {
+    return{
+      props:{error: 404}
+    }
+  }
+
   let variants = await Product.find({
     title: product.title,
     category: product.category,
   });
+
   let colorSizeSlug = {};
   for (let item of variants) {
     if (Object.keys(colorSizeSlug).includes(item.color)) {
       colorSizeSlug[item.color][item.size] = {
         slug: item.slug,
         imageUrl: item.img,
+        availableQty: item.availableQty, // Add availableQty here
       };
     } else {
       colorSizeSlug[item.color] = {};
       colorSizeSlug[item.color][item.size] = {
         slug: item.slug,
         imageUrl: item.img,
+        availableQty: item.availableQty, // Add availableQty here
       };
     }
   }

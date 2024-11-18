@@ -19,50 +19,65 @@ const Checkout = ({ cart, addToCart, removeFromCart, subTotal, clearCart }) => {
     pincode: "",
   });
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false); // Success modal state
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
-    if (!localStorage.getItem("token")) {
+    const token = localStorage.getItem("token");
+    if (!token) {
       router.push("/");
     } else {
-      // Retrieve MyUser from localStorage
-      const storedUser = localStorage.getItem("MyUser");
-      if (storedUser) {
-        const { name, email } = JSON.parse(storedUser);
-        setFormData((prevFormData) => ({
-          ...prevFormData,
-          name,
-          email,
-        }));
-      }
+      const fetchUserData = async () => {
+        try {
+          const response = await fetch("/api/getUser", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ token }),
+          });
+          const data = await response.json();
+
+          if (response.ok) {
+            setFormData({
+              ...formData,
+              name: data.name,
+              email: data.email,
+              address: data.address,
+              pincode: data.pincode,
+              phone: data.phone,
+            });
+            if (data.pincode) fetchLocationData(data.pincode);
+          } else {
+            toast.error("Failed to fetch user data.");
+          }
+        } catch (error) {
+          console.error("Error fetching user data:", error);
+          toast.error("An error occurred while fetching user data.");
+        }
+      };
+
+      fetchUserData();
     }
   }, []);
 
   const isFormValid = Object.values(formData).every(
-    (field) => field.trim() !== ""
+    (field) => String(field).trim() !== ""
   );
+  
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    // For phone number: Allow only 10 digits
-    if (name === "phone" && value.length <= 10) {
+    if (name === "phone" && /^\d{0,10}$/.test(value)) {
       setFormData({ ...formData, [name]: value });
-    }
-
-    // For pincode: Allow only 6 digits
-    else if (name === "pincode" && value.length <= 6) {
+    } else if (name === "pincode" && /^\d{0,6}$/.test(value)) {
       setFormData({ ...formData, [name]: value });
-    }
-
-    // For other fields, just update normally
-    else if (name !== "phone" && name !== "pincode") {
+    } else if (name !== "phone" && name !== "pincode") {
       setFormData({ ...formData, [name]: value });
     }
   };
 
-  // Function to fetch city and state based on pincode
   const fetchLocationData = async (pincode) => {
     try {
       const response = await fetch("/api/pincode", {
@@ -70,25 +85,29 @@ const Checkout = ({ cart, addToCart, removeFromCart, subTotal, clearCart }) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pincode }),
       });
-
+  
       const data = await response.json();
-
+  
       if (response.ok && data) {
-        setFormData({
-          ...formData,
+        setFormData((prevFormData) => ({
+          ...prevFormData, // Retain the previous form data
           city: data.districtName,
           state: data.stateName,
-        });
+        }));
       } else {
-        setFormData({ ...formData, city: "", state: "" });
+        setFormData((prevFormData) => ({
+          ...prevFormData, // Retain the previous form data
+          city: "",
+          state: "",
+        }));
         toast.warn("Pincode not serviceable or incorrect!");
       }
     } catch (error) {
       console.error("Error fetching location data:", error);
     }
   };
+  
 
-  // useEffect to fetch data when pincode is filled with 6 digits
   useEffect(() => {
     if (formData.pincode.length === 6) {
       fetchLocationData(formData.pincode);
@@ -101,14 +120,15 @@ const Checkout = ({ cart, addToCart, removeFromCart, subTotal, clearCart }) => {
 
     try {
       const orderData = {
+        name :formData.name,
         email: formData.email,
         orderId: `${uuidv4().slice(0, 15)}`,
         paymentMethod: method,
-        paymentInfo:
-          method === "Cash on Delivery" ? "Not required" : "Payment info",
+        paymentInfo: method === "Cash on Delivery" ? "Not required" : "Payment info",
         products: cart,
         address: `${formData.address}, ${formData.city}, ${formData.state} - ${formData.pincode}`,
         amount: subTotal,
+        phone: formData.phone,
       };
 
       const response = await fetch("/api/pretransaction", {
@@ -121,16 +141,15 @@ const Checkout = ({ cart, addToCart, removeFromCart, subTotal, clearCart }) => {
       setLoading(false);
 
       if (response.ok) {
-        console.log("Order created successfully:", result);
-        setIsSuccessModalOpen(true); // Open success modal on successful order
+        setIsSuccessModalOpen(true);
         clearCart();
       } else {
-        console.error("Error creating order:", result.message);
-        toast.error(result.message);
+        toast.error(result.message || "Failed to process order.");
       }
     } catch (error) {
       console.error("An error occurred:", error);
       setLoading(false);
+      toast.error("An error occurred while processing the payment.");
     }
   };
 

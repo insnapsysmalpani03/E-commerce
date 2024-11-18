@@ -34,7 +34,18 @@ export default function App({ Component, pageProps }) {
     const token = localStorage.getItem("token");
     if (token) {
       setUser({ value: token });
+
+      // Set a timer to remove the token after 2 minutes
+      const tokenTimeout = setTimeout(() => {
+        localStorage.removeItem("token");
+        setUser({ value: null });
+        console.log("Token expired and removed");
+      }, 10800000); // 2 minutes = 120000ms
+
+      // Clean up the timeout on component unmount or when token changes
+      return () => clearTimeout(tokenTimeout);
     }
+
     setKey(Math.random());
   }, [router.query]);
 
@@ -56,10 +67,10 @@ export default function App({ Component, pageProps }) {
     setSubTotal(subt);
   };
 
-  const addToCart = (itemCode, qty, price, name, size, variant) => {
+  const addToCart = (itemCode, qty, price, name, size, variant, imageUrl) => {
     // Create a unique key for each combination of name, size, and variant
     const itemKey = `${name}-${size}-${variant}`;
-    console.log("Adding to cart:", itemCode, qty, price, name, size, variant);
+    console.log("Adding to cart:", itemCode, qty, price, name, size, variant, imageUrl);
   
     // Copy the existing cart
     let newCart = { ...cart };
@@ -69,7 +80,7 @@ export default function App({ Component, pageProps }) {
       newCart[itemKey].qty += qty; // Increment quantity if it exists
     } else {
       // Otherwise, add it as a new item in the cart
-      newCart[itemKey] = { qty, price, name, size, variant, itemCode }; // Include itemCode here
+      newCart[itemKey] = { qty, price, name, size, variant, itemCode, imageUrl }; // Include imageUrl here
     }
   
     // Update the cart and save it
@@ -141,6 +152,7 @@ export default function App({ Component, pageProps }) {
       />
       <div className="flex-grow">
         <Component
+        user={user}
           cart={cart}
           buyNow={buyNow}
           addToCart={addToCart}

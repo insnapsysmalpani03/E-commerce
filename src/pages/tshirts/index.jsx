@@ -98,34 +98,30 @@ export async function getServerSideProps(context) {
 
   let products = await Product.find({ category: "T-Shirt" });
   let tshirts = {};
-  
+
   for (let item of products) {
     if (item.title in tshirts) {
-      if (
-        !tshirts[item.title].color.includes(item.color) &&
-        item.availableQty > 0
-      ) {
+      // Add color and size without checking `availableQty`
+      if (!tshirts[item.title].color.includes(item.color)) {
         tshirts[item.title].color.push(item.color);
       }
-      if (
-        !tshirts[item.title].size.includes(item.size) &&
-        item.availableQty > 0
-      ) {
+      if (!tshirts[item.title].size.includes(item.size)) {
         tshirts[item.title].size.push(item.size);
       }
     } else {
       tshirts[item.title] = JSON.parse(JSON.stringify(item));
 
-      // Always initialize `color` and `size` as arrays
-      tshirts[item.title].color = item.availableQty > 0 ? [item.color] : [];
-      tshirts[item.title].size = item.availableQty > 0 ? [item.size] : [];
+      // Initialize `color` and `size` arrays without checking `availableQty`
+      tshirts[item.title].color = [item.color];
+      tshirts[item.title].size = [item.size];
     }
   }
 
   return {
-    props: { products: JSON.parse(JSON.stringify(tshirts)) }, // will be passed to the page component as props
+    props: { products: JSON.parse(JSON.stringify(tshirts)) }, // Pass all T-Shirts to the page component
   };
 }
+
 
 
 export default Tshirts;

@@ -5,7 +5,19 @@ import Product from "../../../models/Product";
 
 const handler = async (req, res) => {
   if (req.method === "POST") {
-    const { email, orderId, paymentMethod, products, address, amount } = req.body;
+    const { name, email, orderId, paymentMethod, products, address, amount, phone } = req.body;
+    console.log(req.body)
+
+    // Validate that the phone number exists
+    if (!phone === "") {
+      return res.status(400).json({ success: false, message: "Phone number is required." });
+    }
+
+    // Optionally validate phone number format
+    const phoneRegex = /^[0-9]{10,15}$/; // Example: Allow 10 to 15 digit phone numbers
+    if (!phoneRegex.test(phone)) {
+      return res.status(400).json({ success: false, message: "Invalid phone number format." });
+    }
 
     // Handle cases where `paymentMethod` is "Cash on Delivery" (no `paymentInfo` expected)
     const paymentInfo = paymentMethod === "Cash on Delivery" ? "Not required" : req.body.paymentInfo;
@@ -16,71 +28,63 @@ const handler = async (req, res) => {
       // Loop through the products object to validate and update each product
       for (const [productSlug, productDetails] of Object.entries(products)) {
         const { qty, price, name, size, variant, itemCode } = productDetails;
-
-        // Check if product exists in the database based on the slug
-        const existingProduct = await Product.findOne({ slug: itemCode });
+      
+        // Fetch the specific product based on slug, size, and variant
+        const existingProduct = await Product.findOne({
+          slug: itemCode,
+          size: size || null,
+          color: variant || null,
+        });
+      
         if (!existingProduct) {
-          return res.status(400).json({ success: false, message: `Product with slug ${productSlug} not found.` });
+          return res.status(400).json({
+            success: false,
+            message: `Product with slug ${productSlug}, size ${size}, and variant ${variant} not found.`,
+          });
         }
-
-        // Ensure the price in the request matches the price in the database (to prevent tampering)
+      
+        // Validate the price
         if (price !== existingProduct.price) {
-          return res.status(400).json({ success: false, message: `Price mismatch for product ${productSlug}.` });
+          return res.status(400).json({
+            success: false,
+            message: `Price mismatch for product ${productSlug} (${size}, ${variant}).`,
+          });
         }
-
-        // Ensure the product size and variant match the data in the database
-        if (size && size !== existingProduct.size) {
-          return res.status(400).json({ success: false, message: `Size mismatch for product ${productSlug}.` });
+      
+        // Validate stock
+        if (existingProduct.availableQty < qty) {
+          return res.status(400).json({
+            success: false,
+            message: `Insufficient stock for ${name} (${size}, ${variant}).`,
+          });
         }
-
-        if (variant && variant !== existingProduct.color) {
-          return res.status(400).json({ success: false, message: `Variant mismatch for product ${productSlug}.` });
-        }
-
-        // Ensure the quantity is valid (greater than 0) and within allowable stock
-        if (qty <= 0) {
-          return res.status(400).json({ success: false, message: `Invalid quantity for product ${productSlug}.` });
-        }
-
-        if (existingProduct.availableQty - qty < 1) {
-          return res
-            .status(400)
-            .json({
-              success: false,
-              message: `The ${name} is out of stock or insufficient quantity is available.`,
-            });
-        }
-
-        //Calculate the total price for the product
+      
+        // Calculate the total price
         calculatedAmount += price * qty;
       }
-
-      // Ensure the calculated amount matches the amount in the request body
-      if (calculatedAmount !== amount) {
-        return res.status(400).json({ success: false, message: "Amount does not match the calculated total for the products." });
-      }
-
-      // Decrement the availableqty for each product
+      
+      // After validation, decrement stock
       for (const [productSlug, productDetails] of Object.entries(products)) {
-        const { qty, itemCode } = productDetails;
-
-        // Update the product's available quantity in the database
+        const { qty, size, variant, itemCode } = productDetails;
+      
         await Product.updateOne(
-          { slug: itemCode },
-          { $inc: { availableQty: -qty } } // Decrease availableQty by the ordered qty
+          { slug: itemCode, size: size || null, color: variant || null },
+          { $inc: { availableQty: -qty } }
         );
-      }
+      }      
 
       // Create a new order
       const order = new Order({
+        name,
         email,
         orderId,
         paymentMethod,
         paymentInfo,
         products,
         address,
+        phone, // Include phone in the order
         amount,
-        status: "Pending", // Default status
+        status: "Ordered", // Default status
       });
 
       // Save the order in the database
