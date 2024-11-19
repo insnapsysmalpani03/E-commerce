@@ -6,6 +6,6 @@ export const generateToken = (user) => {
   return jwt.sign(
     { id: user._id, email: user.email },
     process.env.JWT_SECRET,  // JWT secret key (use an environment variable)
-    { expiresIn: '3h' }      // Token expiration (1 hour)
+    { expiresIn: '3h' }      // Token expiration (3 hour)
   );
 };

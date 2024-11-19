@@ -28,8 +28,6 @@ const Navbar = ({
   const dropdownRef = useRef(null);
   const router = useRouter();
 
-  console.log(user)
-
   // Auto open the cart when products are added and automatically close on checkout page
   useEffect(() => {
     if (Object.keys(cart).length > 0) {
@@ -38,7 +36,7 @@ const Navbar = ({
       setIsCartOpen(false); // Close the cart if empty
     }
     console.log(router.pathname);
-    let extempted = ['/checkout', '/order', '/orders', '/','/account', '/login' ,'signup'];
+    let extempted = ['/checkout', '/order', '/orders', '/','/account', '/login' ,'signup', 'forgot'];
     if (extempted.includes(router.pathname)) {
       setIsCartOpen(false); // Close cart when navigating to the checkout page
     }
